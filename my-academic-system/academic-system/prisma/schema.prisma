@@ -1,0 +1,48 @@
+// 1. Definisi Koneksi
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 2. Enum (Pilihan Tipe Tugas)
+enum CourseType {
+  KONSEP   // Butuh rangkuman MD
+  HITUNG   // Butuh latihan soal
+  PRAKTEK  // Butuh coding project
+  PROYEK   // Butuh progress report
+}
+
+// 3. Tabel Mata Kuliah (Janji Kamu)
+model Course {
+  id        String     @id @default(uuid())
+  name      String     // Contoh: "Statistika Komputasi"
+  sks       Int        // Contoh: 3
+  day       Int        // 1=Senin, 2=Selasa, ... 7=Minggu
+  type      CourseType // Tipe matkul
+  
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  // Relasi ke Log Harian
+  logs      DailyLog[]
+}
+
+// 4. Tabel Catatan Harian (Bukti Kerja)
+model DailyLog {
+  id          String   @id @default(uuid())
+  date        DateTime @default(now()) // Tanggal pengerjaan
+  
+  // Relasi: Log ini untuk matkul apa?
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id])
+
+  taskDetail  String   // Tugas yang digenerate sistem. Contoh: "Rangkum Bab 4"
+  status      String   @default("PENDING") // PENDING, DONE, SKIPPED
+  proofLink   String?  // Link ke GitHub commit (opsional di awal)
+  
+  createdAt   DateTime @default(now())
+}
