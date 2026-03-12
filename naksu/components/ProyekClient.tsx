@@ -7,75 +7,88 @@ type Project = {
   id: string;
   title: string;
   description: string;
-  tags: string[];
+  tags: string; // Di DB kita simpan sebagai string, nanti kita split jadi array di UI
   linkUrl: string;
   linkType: "github" | "web";
-  colorCode: string; // Untuk warna garis atas kartu
+  colorCode: string;
 };
-
-const defaultProjects: Project[] = [
-  { id: "p1", title: "Naksu AI Assistant", description: "Asisten virtual web-based terintegrasi dengan Gemini AI, Prisma, Supabase, dan Next.js.", tags: ["Next.js", "Gemini AI", "Tailwind"], linkUrl: "https://github.com", linkType: "github", colorCode: "border-t-amber-500" },
-  { id: "p2", title: "Telegram Bot Manager", description: "Bot cerdas yang dibangun menggunakan bahasa Python dan integrasi MongoDB, di-deploy via Railway.", tags: ["Python", "MongoDB"], linkUrl: "https://github.com", linkType: "github", colorCode: "border-t-blue-500" },
-  { id: "p3", title: "Gym Management API", description: "Sistem backend komprehensif untuk Web Development menggunakan arsitektur Express.js dan MySQL.", tags: ["Express.js", "MySQL"], linkUrl: "https://github.com", linkType: "web", colorCode: "border-t-emerald-500" }
-];
 
 const borderColors = ["border-t-amber-500", "border-t-blue-500", "border-t-emerald-500", "border-t-purple-500", "border-t-rose-500"];
 
 export default function ProyekClient() {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [isClient, setIsClient] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
 
   // State Form
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
-  const [newTags, setNewTags] = useState(""); // dipisah dengan koma
+  const [newTags, setNewTags] = useState(""); 
   const [newLinkUrl, setNewLinkUrl] = useState("");
   const [newLinkType, setNewLinkType] = useState<"github" | "web">("github");
 
   useEffect(() => {
-    setIsClient(true);
-    const saved = localStorage.getItem('naksu-projects');
-    setProjects(saved ? JSON.parse(saved) : defaultProjects);
+    const fetchProjects = async () => {
+      try {
+        const res = await fetch('/api/projects');
+        const data = await res.json();
+        setProjects(data);
+      } catch (error) {
+        console.error("Gagal mengambil data proyek:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchProjects();
   }, []);
 
-  const saveState = (data: Project[]) => {
-    localStorage.setItem('naksu-projects', JSON.stringify(data));
-  };
-
-  const handleAddProject = (e: React.FormEvent) => {
+  const handleAddProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
 
-    const tagsArray = newTags.split(",").map(t => t.trim()).filter(t => t !== "");
+    // Bersihkan spasi berlebih pada tags sebelum disimpan sebagai string
+    const cleanTagsString = newTags.split(",").map(t => t.trim()).filter(t => t !== "").join(",");
     const randomColor = borderColors[Math.floor(Math.random() * borderColors.length)];
 
-    const newProject: Project = {
-      id: `proj-${Date.now()}`,
+    const projectData = {
       title: newTitle,
       description: newDesc,
-      tags: tagsArray,
+      tags: cleanTagsString,
       linkUrl: newLinkUrl,
       linkType: newLinkType,
       colorCode: randomColor
     };
 
-    const updated = [newProject, ...projects];
-    setProjects(updated);
-    saveState(updated);
-    
-    // Reset form
-    setNewTitle(""); setNewDesc(""); setNewTags(""); setNewLinkUrl(""); setIsAdding(false);
+    try {
+      const res = await fetch('/api/projects', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(projectData),
+      });
+      const savedProject = await res.json();
+      setProjects([savedProject, ...projects]);
+      
+      setNewTitle(""); setNewDesc(""); setNewTags(""); setNewLinkUrl(""); setIsAdding(false);
+    } catch (error) {
+      console.error("Gagal menyimpan proyek:", error);
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm("Hapus proyek ini dari portofolio?")) return;
-    const updated = projects.filter(p => p.id !== id);
-    setProjects(updated);
-    saveState(updated);
+    try {
+      await fetch('/api/projects', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      setProjects(projects.filter(p => p.id !== id));
+    } catch (error) {
+      console.error("Gagal menghapus proyek:", error);
+    }
   };
 
-  if (!isClient) return null;
+  if (isLoading) return <div className="p-8 text-center text-slate-500 font-bold animate-pulse">Memuat Portofolio...</div>;
 
   return (
     <>
@@ -86,10 +99,7 @@ export default function ProyekClient() {
           </h2>
           <p className="text-slate-500 mt-1">Gudang amunisi karya. Persiapan solid untuk mendaftar GSA.</p>
         </div>
-        <button 
-          onClick={() => setIsAdding(!isAdding)}
-          className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors shrink-0"
-        >
+        <button onClick={() => setIsAdding(!isAdding)} className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors shrink-0">
           {isAdding ? <X size={16} /> : <Plus size={16} />} {isAdding ? "Batal" : "Tambah Karya"}
         </button>
       </header>
@@ -160,9 +170,10 @@ export default function ProyekClient() {
               <p className="text-sm text-slate-500 mb-6 flex-1">{proj.description}</p>
               
               <div className="flex flex-wrap gap-2 mt-auto">
-                {proj.tags.map((tag, idx) => (
+                {/* Memecah string tags kembali menjadi array agar bisa dirender sebagai kotak-kotak */}
+                {proj.tags && proj.tags.split(",").map((tag, idx) => (
                   <span key={idx} className="bg-slate-100 text-slate-600 border border-slate-200 px-2.5 py-1 rounded-md text-xs font-bold">
-                    {tag}
+                    {tag.trim()}
                   </span>
                 ))}
               </div>

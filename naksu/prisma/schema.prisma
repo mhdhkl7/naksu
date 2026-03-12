@@ -55,3 +55,29 @@ model UpmIdea {
   content   String
   createdAt DateTime @default(now())
 }
+
+// --- TABEL KOMTING ---
+model Draft {
+  id        String   @id @default(cuid())
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+}
+
+model ClassLink {
+  id        String   @id @default(cuid())
+  title     String
+  url       String
+  createdAt DateTime @default(now())
+}
+
+// --- TABEL PROYEK & PORTOFOLIO ---
+model Project {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @db.Text
+  tags        String   // Disimpan sebagai teks biasa, dipisah dengan koma
+  linkUrl     String
+  linkType    String   // Berisi "github" atau "web"
+  colorCode   String
+  createdAt   DateTime @default(now())
+}
