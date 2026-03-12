@@ -1,3 +1,4 @@
+export const runtime = 'edge'; // Tambahkan ini agar lebih cepat dan ringan
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 
