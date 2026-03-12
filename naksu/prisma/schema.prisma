@@ -29,16 +29,6 @@ model Course {
   createdAt DateTime @default(now())
 }
 
-// Tabel Database Anggota UPM English Club
-model UpmMember {
-  id        String   @id @default(uuid())
-  name      String
-  nim       String
-  phone     String
-  email     String
-  createdAt DateTime @default(now())
-}
-
 // Tabel untuk Agenda/Proker UPM
 model UpmProker {
   id        String   @id @default(uuid())
@@ -79,5 +69,24 @@ model Project {
   linkUrl     String
   linkType    String   // Berisi "github" atau "web"
   colorCode   String
+  createdAt   DateTime @default(now())
+}
+
+// --- TABEL UPM ENGLISH CLUB ---
+model UpmMember {
+  id        String   @id @default(cuid())
+  nim       String   @unique
+  name      String
+  phone     String?  // Tambahkan ini (tanda ? artinya boleh kosong)
+  email     String?  // Tambahkan ini
+  joinedAt  DateTime @default(now())
+}
+
+model UpmAgenda {
+  id          String   @id @default(cuid())
+  title       String
+  date        String
+  description String   @db.Text
+  status      String   @default("Upcoming") // Upcoming, Completed
   createdAt   DateTime @default(now())
 }

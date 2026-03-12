@@ -1,183 +1,166 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { Users, Upload, Edit2, Trash2, Check, X, Loader2, UserPlus } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Users, Trash2, Plus, Upload, Search } from "lucide-react";
 
-type Member = { id: string; name: string; nim: string; phone: string; email: string; };
+type Member = { id: string; nim: string; name: string; phone?: string; email?: string };
 
 export default function UpmMemberManager() {
   const [members, setMembers] = useState<Member[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<Partial<Member>>({});
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // State untuk form tambah manual
+  const [searchQuery, setSearchQuery] = useState("");
+  
+  // State Form
   const [isAdding, setIsAdding] = useState(false);
-  const [newMember, setNewMember] = useState({ name: "", nim: "", phone: "", email: "" });
+  const [bulkData, setBulkData] = useState("");
 
-  useEffect(() => { fetchMembers(); }, []);
+  useEffect(() => {
+    fetchMembers();
+  }, []);
 
   const fetchMembers = async () => {
-    setIsLoading(true);
     try {
-      const res = await fetch("/api/upm-members");
-      const text = await res.text(); 
-      const data = text ? JSON.parse(text) : []; 
-      setMembers(Array.isArray(data) ? data : []);
+      const res = await fetch('/api/upm-members');
+      const data = await res.json();
+      setMembers(data);
     } catch (error) {
       console.error("Gagal mengambil data:", error);
-      setMembers([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // FUNGSI TAMBAH MANUAL
-  const handleAddManual = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMember.name || !newMember.nim) return;
+  const handleBulkUpload = async () => {
+    if (!bulkData.trim()) return;
     
-    await fetch("/api/upm-members", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(newMember)
-    });
-    
-    setIsAdding(false);
-    setNewMember({ name: "", nim: "", phone: "", email: "" });
-    fetchMembers();
-  };
+    // Asumsi format: NIM, Nama Lengkap, No HP, Email
+    const newMembers = bulkData.split('\n').map(line => {
+      const [nim, name, phone, email] = line.split(/[,\t]/);
+      return {
+        nim: nim?.trim(),
+        name: name?.trim() || "Tanpa Nama",
+        phone: phone?.trim() || "",
+        email: email?.trim() || ""
+      };
+    }).filter(m => m.nim); // Harus ada NIM
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      const text = event.target?.result as string;
-      // Ganti split separator dari \n lalu cek barisnya. Kita pakai regex untuk cover koma atau titik koma
-      const lines = text.split("\n").filter(line => line.trim() !== "");
+    try {
+      const res = await fetch('/api/upm-members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newMembers), // Kirim sebagai Array (sesuai API-mu)
+      });
       
-      const newMembers = lines.slice(1).map(line => {
-        const separator = line.includes(";") ? ";" : ",";
-        const [name, nim, phone, email] = line.split(separator).map(item => item.trim());
-        return { name, nim, phone, email };
-      }).filter(m => m.name && m.nim); 
-
-      if (newMembers.length > 0) {
-        await fetch("/api/upm-members", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(newMembers)
-        });
-        fetchMembers(); 
+      if (res.ok) {
+        setBulkData("");
+        setIsAdding(false);
+        fetchMembers(); // Refresh data
       }
-    };
-    reader.readAsText(file);
-    if (fileInputRef.current) fileInputRef.current.value = ""; 
+    } catch (error) {
+      console.error("Gagal upload massal:", error);
+    }
   };
 
-  const saveEdit = async () => {
-    if (!editingId) return;
-    await fetch("/api/upm-members", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: editingId, ...editForm })
-    });
-    setEditingId(null);
-    fetchMembers();
+  const handleDelete = async (id: string) => {
+    if (!confirm("Hapus anggota ini?")) return;
+    try {
+      await fetch('/api/upm-members', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      setMembers(members.filter(m => m.id !== id));
+    } catch (error) {
+      console.error("Gagal hapus:", error);
+    }
   };
 
-  const deleteMember = async (id: string) => {
-    if(!confirm("Yakin ingin menghapus anggota ini?")) return;
-    await fetch(`/api/upm-members?id=${id}`, { method: "DELETE" });
-    fetchMembers();
-  };
+  const filteredMembers = members.filter(m => 
+    m.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+    m.nim.includes(searchQuery)
+  );
+
+  if (isLoading) return <div className="p-8 text-center text-slate-500 animate-pulse">Memuat Database UPM...</div>;
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-8">
-      <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-emerald-50">
-        <h3 className="text-lg font-bold text-emerald-900 flex items-center gap-2">
-          <Users size={20} /> Database Anggota UPM
-        </h3>
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+      <header className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6 border-b border-slate-100 pb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <Users className="text-blue-500" /> Manajemen Anggota UPM
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">Total {members.length} anggota terdaftar aktif.</p>
+        </div>
         
         <div className="flex gap-2">
-          <button 
-            onClick={() => setIsAdding(!isAdding)}
-            className="bg-white border border-emerald-200 text-emerald-700 px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-100 transition-colors"
-          >
-            {isAdding ? <X size={16} /> : <UserPlus size={16} />} 
-            {isAdding ? "Batal" : "Tambah Manual"}
-          </button>
-          
-          <input type="file" accept=".csv" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-          <button 
-            onClick={() => fileInputRef.current?.click()}
-            className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-emerald-700 transition-colors"
-          >
-            <Upload size={16} /> Upload CSV
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+            <input 
+              type="text" 
+              placeholder="Cari NIM / Nama..." 
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-sm outline-none focus:border-blue-500 w-full md:w-48"
+            />
+          </div>
+          <button onClick={() => setIsAdding(!isAdding)} className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 shrink-0 transition-colors">
+            {isAdding ? "Batal" : <><Plus size={16} /> Tambah</>}
           </button>
         </div>
-      </div>
+      </header>
 
-      {/* Form Tambah Manual */}
+      {/* Form Upload Massal */}
       {isAdding && (
-        <form onSubmit={handleAddManual} className="p-4 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-3">
-          <input required type="text" placeholder="Nama..." value={newMember.name} onChange={e => setNewMember({...newMember, name: e.target.value})} className="flex-1 min-w-[150px] border rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
-          <input required type="text" placeholder="NIM..." value={newMember.nim} onChange={e => setNewMember({...newMember, nim: e.target.value})} className="w-32 border rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
-          <input type="text" placeholder="No HP..." value={newMember.phone} onChange={e => setNewMember({...newMember, phone: e.target.value})} className="w-32 border rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
-          <input type="email" placeholder="Email..." value={newMember.email} onChange={e => setNewMember({...newMember, email: e.target.value})} className="flex-1 min-w-[150px] border rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
-          <button type="submit" className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-700">Simpan</button>
-        </form>
+        <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-5 mb-6">
+          <h3 className="text-sm font-bold text-blue-900 flex items-center gap-2 mb-2">
+            <Upload size={16} className="text-blue-600" /> Upload Massal (Copy-Paste dari Excel/CSV)
+          </h3>
+          <p className="text-xs text-blue-700 mb-3">Format per baris: <strong className="font-mono bg-blue-100 px-1 rounded">NIM, Nama, NoHP, Email</strong> (Bisa dipisah koma atau Tab).</p>
+          <textarea 
+            value={bulkData}
+            onChange={e => setBulkData(e.target.value)}
+            className="w-full h-32 p-3 border border-blue-200 rounded-lg text-sm outline-none focus:border-blue-500 font-mono"
+            placeholder="24010101, Budi Santoso, 081234, budi@mail.com&#10;24010102, Siti Aminah, 085678, siti@mail.com"
+          />
+          <button onClick={handleBulkUpload} className="mt-3 bg-blue-600 text-white font-bold py-2 px-6 rounded-lg text-sm hover:bg-blue-700 transition-colors">
+            Simpan Data
+          </button>
+        </div>
       )}
 
+      {/* Tabel Anggota */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left">
-          <thead className="text-xs text-slate-500 uppercase bg-white border-b border-slate-100">
-            <tr>
-              <th className="px-6 py-3">Nama</th>
-              <th className="px-6 py-3">NIM</th>
-              <th className="px-6 py-3">No. HP</th>
-              <th className="px-6 py-3">Email</th>
-              <th className="px-6 py-3 text-right">Aksi</th>
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-slate-200 text-slate-500 uppercase text-xs tracking-wider">
+              <th className="py-3 px-4 font-bold">NIM</th>
+              <th className="py-3 px-4 font-bold">Nama Lengkap</th>
+              <th className="py-3 px-4 font-bold">Kontak</th>
+              <th className="py-3 px-4 font-bold text-center">Aksi</th>
             </tr>
           </thead>
           <tbody>
-            {isLoading ? (
-              <tr><td colSpan={5} className="text-center py-8"><Loader2 className="animate-spin inline text-emerald-500" /></td></tr>
-            ) : members.length === 0 ? (
-              <tr><td colSpan={5} className="text-center py-8 text-slate-400">Belum ada data. Silakan tambah manual atau upload CSV.</td></tr>
-            ) : (
-              members.map((m) => (
-                <tr key={m.id} className="border-b border-slate-50 hover:bg-slate-50">
-                  <td className="px-6 py-4 font-medium text-slate-800">
-                    {editingId === m.id ? <input className="border rounded px-2 py-1 w-full" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /> : m.name}
-                  </td>
-                  <td className="px-6 py-4 text-slate-600">
-                    {editingId === m.id ? <input className="border rounded px-2 py-1 w-24" value={editForm.nim} onChange={e => setEditForm({...editForm, nim: e.target.value})} /> : m.nim}
-                  </td>
-                  <td className="px-6 py-4 text-slate-600">
-                    {editingId === m.id ? <input className="border rounded px-2 py-1 w-32" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} /> : m.phone}
-                  </td>
-                  <td className="px-6 py-4 text-slate-600">
-                    {editingId === m.id ? <input className="border rounded px-2 py-1 w-full" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} /> : m.email}
-                  </td>
-                  <td className="px-6 py-4 text-right flex justify-end gap-2">
-                    {editingId === m.id ? (
-                      <>
-                        <button onClick={saveEdit} className="text-green-600 p-1 hover:bg-green-50 rounded"><Check size={16} /></button>
-                        <button onClick={() => setEditingId(null)} className="text-slate-400 p-1 hover:bg-slate-100 rounded"><X size={16} /></button>
-                      </>
-                    ) : (
-                      <>
-                        <button onClick={() => { setEditingId(m.id); setEditForm(m); }} className="text-blue-500 p-1 hover:bg-blue-50 rounded"><Edit2 size={16} /></button>
-                        <button onClick={() => deleteMember(m.id)} className="text-red-500 p-1 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))
+            {filteredMembers.map(member => (
+              <tr key={member.id} className="border-b border-slate-100 hover:bg-slate-50 transition-colors">
+                <td className="py-3 px-4 font-mono text-slate-600">{member.nim}</td>
+                <td className="py-3 px-4 font-semibold text-slate-800">{member.name}</td>
+                <td className="py-3 px-4 text-xs text-slate-500">
+                  <div className="flex flex-col gap-0.5">
+                    <span>{member.phone || '-'}</span>
+                    <span>{member.email || '-'}</span>
+                  </div>
+                </td>
+                <td className="py-3 px-4 text-center">
+                  <button onClick={() => handleDelete(member.id)} className="text-slate-400 hover:text-red-500 p-1 rounded hover:bg-red-50 transition-colors">
+                    <Trash2 size={16} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {filteredMembers.length === 0 && (
+              <tr>
+                <td colSpan={4} className="py-8 text-center text-slate-400 italic">Data anggota tidak ditemukan.</td>
+              </tr>
             )}
           </tbody>
         </table>

@@ -1,105 +1,148 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { CalendarDays, Plus, Trash2, Edit2, Check, X, Loader2 } from "lucide-react";
+import { Briefcase, Trash2, Plus, CheckCircle, Clock } from "lucide-react";
 
-type Proker = { id: string; title: string; date: string; status: string; };
+// Tipe disesuaikan persis dengan model UpmProker di schema.prisma
+type Proker = { id: string; title: string; date: string; status: string };
 
 export default function UpmProkerManager() {
   const [prokers, setProkers] = useState<Proker[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAdding, setIsAdding] = useState(false);
-  const [newProker, setNewProker] = useState({ title: "", date: "", status: "Rencana" });
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<Partial<Proker>>({});
 
-  useEffect(() => { fetchProkers(); }, []);
+  // State Form (Disesuaikan dengan database)
+  const [newTitle, setNewTitle] = useState("");
+  const [newDate, setNewDate] = useState("");
+  const [newStatus, setNewStatus] = useState("Rencana");
+
+  useEffect(() => {
+    fetchProkers();
+  }, []);
 
   const fetchProkers = async () => {
-    setIsLoading(true);
     try {
-      const res = await fetch("/api/upm-prokers");
-      const text = await res.text();
-      setProkers(text ? JSON.parse(text) : []);
-    } catch (e) { setProkers([]); } 
-    finally { setIsLoading(false); }
+      const res = await fetch('/api/upm-prokers');
+      const data = await res.json();
+      setProkers(data);
+    } catch (error) {
+      console.error("Gagal mengambil data proker:", error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleAdd = async (e: React.FormEvent) => {
+  const handleAddProker = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch("/api/upm-prokers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(newProker) });
-    setIsAdding(false);
-    setNewProker({ title: "", date: "", status: "Rencana" });
-    fetchProkers();
+    if (!newTitle.trim() || !newDate.trim()) return;
+
+    try {
+      const res = await fetch('/api/upm-prokers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          title: newTitle, 
+          date: newDate, 
+          status: newStatus 
+        }),
+      });
+      
+      if (res.ok) {
+        setNewTitle("");
+        setNewDate("");
+        setNewStatus("Rencana");
+        setIsAdding(false);
+        fetchProkers(); // Refresh data
+      }
+    } catch (error) {
+      console.error("Gagal menyimpan proker:", error);
+    }
   };
 
-  const saveEdit = async () => {
-    if (!editingId) return;
-    await fetch("/api/upm-prokers", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: editingId, ...editForm }) });
-    setEditingId(null);
-    fetchProkers();
+  const handleDelete = async (id: string) => {
+    if (!confirm("Hapus program kerja ini?")) return;
+    try {
+      await fetch('/api/upm-prokers', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      setProkers(prokers.filter(p => p.id !== id));
+    } catch (error) {
+      console.error("Gagal hapus proker:", error);
+    }
   };
 
-  const deleteProker = async (id: string) => {
-    if(!confirm("Hapus proker ini?")) return;
-    await fetch(`/api/upm-prokers?id=${id}`, { method: "DELETE" });
-    fetchProkers();
-  };
+  if (isLoading) return <div className="p-8 text-center text-slate-500 animate-pulse">Memuat Data Proker UPM...</div>;
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden mb-8">
-      <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-teal-50">
-        <h3 className="text-lg font-bold text-teal-900 flex items-center gap-2"><CalendarDays size={20} /> Agenda Kegiatan</h3>
-        <button onClick={() => setIsAdding(!isAdding)} className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 hover:bg-teal-700 transition-colors">
-          {isAdding ? <X size={16} /> : <Plus size={16} />} {isAdding ? "Batal" : "Tambah Proker"}
+    <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm mt-6">
+      <header className="flex justify-between items-center mb-6 border-b border-slate-100 pb-6">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
+            <Briefcase className="text-purple-500" /> Program Kerja (Proker)
+          </h2>
+          <p className="text-sm text-slate-500 mt-1">Pantau jalannya agenda UPM English Club.</p>
+        </div>
+        <button onClick={() => setIsAdding(!isAdding)} className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors">
+          {isAdding ? "Batal" : <><Plus size={16} /> Tambah Proker</>}
         </button>
-      </div>
+      </header>
 
+      {/* Form Tambah Proker */}
       {isAdding && (
-        <form onSubmit={handleAdd} className="p-4 bg-slate-50 border-b border-slate-100 flex flex-wrap gap-3">
-          <input required type="text" placeholder="Nama Proker..." value={newProker.title} onChange={e => setNewProker({...newProker, title: e.target.value})} className="flex-1 min-w-[150px] border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-500" />
-          <input required type="text" placeholder="Tanggal/Bulan..." value={newProker.date} onChange={e => setNewProker({...newProker, date: e.target.value})} className="w-32 border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-500" />
-          <select value={newProker.status} onChange={e => setNewProker({...newProker, status: e.target.value})} className="border rounded-lg px-3 py-2 text-sm outline-none focus:border-teal-500">
-            <option value="Rencana">Rencana</option>
-            <option value="Berjalan">Berjalan</option>
-            <option value="Selesai">Selesai</option>
-          </select>
-          <button type="submit" className="bg-teal-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-teal-700">Simpan</button>
+        <form onSubmit={handleAddProker} className="bg-purple-50/50 border border-purple-100 rounded-xl p-5 mb-6 animate-in slide-in-from-top-4">
+          <h3 className="text-sm font-bold text-purple-900 mb-4">Input Proker Baru</h3>
+          <div className="flex flex-col gap-4">
+            <input required type="text" placeholder="Nama Proker (Cth: English Debate)" value={newTitle} onChange={e => setNewTitle(e.target.value)} className="w-full p-2.5 border border-purple-200 rounded-lg text-sm outline-none focus:border-purple-500" />
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-bold text-purple-800 mb-1 block">Waktu Pelaksanaan (Date)</label>
+                <input required type="text" placeholder="Cth: 20 Agustus 2026 / Bulan Depan" value={newDate} onChange={e => setNewDate(e.target.value)} className="w-full p-2.5 border border-purple-200 rounded-lg text-sm outline-none focus:border-purple-500" />
+              </div>
+              <div>
+                <label className="text-xs font-bold text-purple-800 mb-1 block">Status</label>
+                <select value={newStatus} onChange={e => setNewStatus(e.target.value)} className="w-full p-2.5 border border-purple-200 rounded-lg text-sm outline-none focus:border-purple-500">
+                  <option value="Rencana">Rencana</option>
+                  <option value="Berjalan">Berjalan</option>
+                  <option value="Selesai">Selesai</option>
+                </select>
+              </div>
+            </div>
+
+            <button type="submit" className="bg-purple-600 text-white font-bold py-2.5 rounded-lg text-sm hover:bg-purple-700 transition-colors mt-2">
+              Simpan Proker
+            </button>
+          </div>
         </form>
       )}
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left">
-          <thead className="text-xs text-slate-500 uppercase bg-white border-b border-slate-100">
-            <tr><th className="px-6 py-3">Proker</th><th className="px-6 py-3">Tanggal</th><th className="px-6 py-3">Status</th><th className="px-6 py-3 text-right">Aksi</th></tr>
-          </thead>
-          <tbody>
-            {isLoading ? <tr><td colSpan={4} className="text-center py-8"><Loader2 className="animate-spin inline text-teal-500" /></td></tr> : 
-             prokers.length === 0 ? <tr><td colSpan={4} className="text-center py-8 text-slate-400">Belum ada agenda proker.</td></tr> : 
-             prokers.map((p) => (
-              <tr key={p.id} className="border-b border-slate-50 hover:bg-slate-50">
-                <td className="px-6 py-4 font-medium text-slate-800">{editingId === p.id ? <input className="border px-2 py-1 w-full" value={editForm.title} onChange={e => setEditForm({...editForm, title: e.target.value})} /> : p.title}</td>
-                <td className="px-6 py-4 text-slate-600">{editingId === p.id ? <input className="border px-2 py-1 w-full" value={editForm.date} onChange={e => setEditForm({...editForm, date: e.target.value})} /> : p.date}</td>
-                <td className="px-6 py-4">
-                  {editingId === p.id ? (
-                    <select value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})} className="border px-2 py-1">
-                      <option value="Rencana">Rencana</option><option value="Berjalan">Berjalan</option><option value="Selesai">Selesai</option>
-                    </select>
-                  ) : (
-                    <span className={`px-2 py-1 rounded text-xs font-bold ${p.status === 'Selesai' ? 'bg-green-100 text-green-700' : p.status === 'Berjalan' ? 'bg-blue-100 text-blue-700' : 'bg-slate-100 text-slate-700'}`}>{p.status}</span>
-                  )}
-                </td>
-                <td className="px-6 py-4 text-right flex justify-end gap-2">
-                  {editingId === p.id ? (
-                    <><button onClick={saveEdit} className="text-green-600 p-1"><Check size={16} /></button><button onClick={() => setEditingId(null)} className="text-slate-400 p-1"><X size={16} /></button></>
-                  ) : (
-                    <><button onClick={() => { setEditingId(p.id); setEditForm(p); }} className="text-blue-500 p-1"><Edit2 size={16} /></button><button onClick={() => deleteProker(p.id)} className="text-red-500 p-1"><Trash2 size={16} /></button></>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Daftar Proker */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {prokers.map(proker => (
+          <div key={proker.id} className="border border-slate-200 rounded-xl p-4 relative group hover:border-purple-300 transition-colors bg-slate-50 flex flex-col justify-between">
+            <div>
+              <button onClick={() => handleDelete(proker.id)} className="absolute top-4 right-4 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Trash2 size={16} />
+              </button>
+              <div className="flex items-center gap-2 mb-2 pr-8">
+                {proker.status === "Selesai" ? <CheckCircle size={18} className="text-green-500" /> : <Clock size={18} className="text-amber-500" />}
+                <h3 className="font-bold text-slate-800">{proker.title}</h3>
+              </div>
+              <p className="text-sm text-slate-600 mb-4 font-mono bg-purple-100 px-2 py-1 rounded inline-block">📅 {proker.date}</p>
+            </div>
+            
+            <div className="mt-auto">
+              <span className={`px-2.5 py-1 rounded text-xs font-bold ${proker.status === 'Selesai' ? 'bg-green-100 text-green-700' : proker.status === 'Berjalan' ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-600'}`}>
+                {proker.status}
+              </span>
+            </div>
+          </div>
+        ))}
+        {prokers.length === 0 && (
+          <p className="text-sm text-slate-400 col-span-2 text-center py-4">Belum ada program kerja yang ditambahkan.</p>
+        )}
       </div>
     </div>
   );
